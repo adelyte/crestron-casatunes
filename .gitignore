@@ -1,0 +1,17 @@
+Status$
+*.ASV
+*.bak
+*.sm2
+*.um2
+*.mdb
+*.ldb
+*.iPad*
+*.Upx*
+*.xexe*
+*.xweb*
+*AUTOSAVE*
+*SPlsWork*
+Documentation/*.spz
+*CrosspointList.txt
+*_Config.smw
+*_compiled.zip
