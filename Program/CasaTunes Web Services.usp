@@ -1,0 +1,114 @@
+/*
+ * Adelyte Company
+ * www.adelyte.com
+ */
+
+#SYMBOL_NAME "CasaTunes Web Services"
+#CATEGORY "8" // Media Resource
+#DEFAULT_VOLATILE
+#ENABLE_DYNAMIC
+#ENABLE_TRACE
+
+INTEGER __Initialized__, __Connected__, __Parsing__;
+
+BUFFER_INPUT  Response[65534];
+STRING_OUTPUT Request;
+
+STRING_PARAMETER Host[255];
+
+/*
+ * Classes
+ */
+
+STRUCTURE STRUCT_APPLICATION_INFO
+{
+	INTEGER AppInitialized;         // 0|1 When CasaTunes has finished initializing this value is set to true. An application must not call other methods until this value is set to true (and CasaTunes has a valid license)
+	STRING  CasaTunesVersion[31];   // The current CasaTunes version
+	INTEGER iPodDevicesDocked;      // 0|1 If true, there are one or more iPod devices docked on the music server
+	INTEGER LastChangedEventID;     // Specifies the ID of the last event that changed the system state. You can use this ID to check whether the system state has changed since the previous call the GetApplicationInfo().
+	INTEGER LicenseValid;           // 0|1 Specifies whether CasaTunes has a valid license. A valid license is required before any additional methods can be called.
+	STRING  MessageID[31];          // Specifies the ID of the current message that should be displayed to the user. See GetMessageInfo(). If it is nothing then you should hide any messages being displayed. There is at most one message displayed at a time.
+	STRING  SessionID[31];          // Specifies the unique ID for the current server session. You should reload your system state information when the SessionID changes.
+	INTEGER TaskCompleted;          // 0|1 If true, there are no active tasks. If false, there is an active task under way. The name of the task and progress is provided by TaskCompleted and TaskPhase, respectively.
+	STRING  TaskPhase[31];          // A string describing the current phase of the initialization progress
+	INTEGER TaskProgress;           // 0..100 Indicates initializing progress.
+	STRING  WebServicesVersion[31]; // The current version of these Web Services
+};
+
+STRUCT_APPLICATION_INFO ApplicationInfo;
+
+
+/*
+ * Functions
+ */
+
+FUNCTION Initialize()
+{
+    __Initialized__ = 1;
+    __Connected__ = 0;
+    __Parsing__ = 0;
+}
+
+FUNCTION Post(STRING path, STRING envelope)
+{
+    INTEGER length;
+    
+    length = LEN(envelope);
+    
+    MAKESTRING(Request, "POST %s HTTP/1.1\nHost: %s\nContent-Type: application/soap+xml; charset=utf-8\nContent-Length: %u\nSOAPAction: \"http://www.w3.org/2003/05/soap-envelope\"\n%s\n\n", path, Host, length, envelope);
+}
+
+STRING_FUNCTION Envelop(STRING method, STRING arguments)
+{
+    STRING envelope[1023];
+    
+    MAKESTRING(envelope, "<?xml version=\"1.0\"?>\n<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\">\n<soap:Header>\n</soap:Header>\n<soap:Body>\n<m:%s xmlns=\"http://%s/\">%s</m:%s>\n</soap:Body>\n</soap:Envelope>", method, Host, arguments, method);
+    
+    RETURN(envelope);
+}
+
+/*
+ * Events
+ */
+
+// Application Information Methods
+
+DIGITAL_INPUT GetApplicationInfo;
+PUSH GetApplicationInfo
+{
+    Post("/", Envelop("GetApplicationInfo", ""));
+}
+
+// System Information Methods
+
+DIGITAL_INPUT GetSystemInfo;
+PUSH GetSystemInfo
+{
+    Post("/", Envelop("GetSystemInfo", ""));
+}
+
+// HTTP Response
+
+CHANGE Response
+{
+    IF(__Parsing__)
+        TERMINATEEVENT;
+    ELSE
+        __Parsing__ = 1;
+    
+    WHILE(Response != "")
+    {
+        TRACE("%s", REMOVEBYLENGTH(MIN(LEN(Response), 250), Response));
+    }
+    
+    __Parsing__ = 0;
+}
+
+/*
+ * Runtime
+ */
+
+FUNCTION Main()
+{
+    Initialize();
+}
