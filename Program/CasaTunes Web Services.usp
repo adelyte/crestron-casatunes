@@ -35,6 +35,28 @@ STRUCTURE STRUCT_APPLICATION_INFO
 	STRING  WebServicesVersion[31]; // The current version of these Web Services
 };
 
+/* EXAMPLE
+
+{
+    "d": {
+        "__type": "ApplicationInfo:http://CasaTunes.com/WebService/2009/07",
+        "AppInitialized": true,
+        "CasaTunesVersion": "4.00.121017",
+        "LastChangeEventID": 157,
+        "LicenseValid": true,
+        "MessageID": null,
+        "SessionID": "207d20df-0348-4a90-bc9f-e0712eedae20",
+        "TaskCompleted": true,
+        "TaskName": "",
+        "TaskProgress": 100,
+        "WebServicesVersion": "5.4",
+        "WolMacAddress": null,
+        "iPodDevicesDocked": false
+    }
+}
+
+*/
+
 STRUCT_APPLICATION_INFO ApplicationInfo;
 
 
@@ -46,25 +68,15 @@ FUNCTION Initialize()
 {
     __Initialized__ = 1;
     __Connected__ = 0;
-    __Parsing__ = 0;
 }
 
-FUNCTION Post(STRING path, STRING envelope)
+FUNCTION Post(STRING action, STRING arguments)
 {
     INTEGER length;
     
-    length = LEN(envelope);
+    length = LEN(arguments);
     
-    MAKESTRING(Request, "POST %s HTTP/1.1\nHost: %s\nContent-Type: application/soap+xml; charset=utf-8\nContent-Length: %u\nSOAPAction: \"http://www.w3.org/2003/05/soap-envelope\"\n%s\n\n", path, Host, length, envelope);
-}
-
-STRING_FUNCTION Envelop(STRING method, STRING arguments)
-{
-    STRING envelope[1023];
-    
-    MAKESTRING(envelope, "<?xml version=\"1.0\"?>\n<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\">\n<soap:Header>\n</soap:Header>\n<soap:Body>\n<m:%s xmlns=\"http://%s/\">%s</m:%s>\n</soap:Body>\n</soap:Envelope>", method, Host, arguments, method);
-    
-    RETURN(envelope);
+    MAKESTRING(Request, "POST /CasaTunes/CasaService.svc/%s HTTP/1.1\nHost: %s\nContent-Type: application/json; charset=utf-8\nContent-Length: %u\n\n%s\n\n", action, Host, length, arguments);
 }
 
 /*
@@ -76,7 +88,7 @@ STRING_FUNCTION Envelop(STRING method, STRING arguments)
 DIGITAL_INPUT GetApplicationInfo;
 PUSH GetApplicationInfo
 {
-    Post("/", Envelop("GetApplicationInfo", ""));
+    Post("GetApplicationInfo", "{\"d\": null}");
 }
 
 // System Information Methods
@@ -84,24 +96,50 @@ PUSH GetApplicationInfo
 DIGITAL_INPUT GetSystemInfo;
 PUSH GetSystemInfo
 {
-    Post("/", Envelop("GetSystemInfo", ""));
+    Post("GetSystemInfo", "{\"d\": null}");
+}
+
+/*
+ * Response Parsing
+ */
+
+// JSON
+
+STRING_FUNCTION GetValue(STRING key, STRING json)
+{
+    INTEGER start, end;
+    
+    start = FIND(key, json);
+    IF(start = 0) RETURN("");
+    
+    start = start + LEN(key) + 5;
+    end = FIND("\"", json, start);
+    
+    RETURN(MID(json, start, end - start));
 }
 
 // HTTP Response
 
 CHANGE Response
 {
-    IF(__Parsing__)
-        TERMINATEEVENT;
-    ELSE
-        __Parsing__ = 1;
+    STRING http_json[2048], http[1024], json[1024], value[256];
+    INTEGER length;
     
-    WHILE(Response != "")
+    http_json = GATHER("}\n\n", Response);
+    http = REMOVE("\n\n", http_json);
+    json = REMOVE("\n\n", http_json);
+    
+    value = GetValue("__type", json);
+    value = REMOVE(":", json);
+    
+    IF(value = "ApplicationInfo:")
     {
-        TRACE("%s", REMOVEBYLENGTH(MIN(LEN(Response), 250), Response));
+        
     }
-    
-    __Parsing__ = 0;
+    ELSE IF(value = "SystemInfo:")
+    {
+        
+    }
 }
 
 /*
