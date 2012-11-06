@@ -22,42 +22,85 @@ STRING_PARAMETER Host[255];
 
 STRUCTURE STRUCT_APPLICATION_INFO
 {
-	INTEGER AppInitialized;         // 0|1 When CasaTunes has finished initializing this value is set to true. An application must not call other methods until this value is set to true (and CasaTunes has a valid license)
-	STRING  CasaTunesVersion[31];   // The current CasaTunes version
-	INTEGER iPodDevicesDocked;      // 0|1 If true, there are one or more iPod devices docked on the music server
-	INTEGER LastChangedEventID;     // Specifies the ID of the last event that changed the system state. You can use this ID to check whether the system state has changed since the previous call the GetApplicationInfo().
-	INTEGER LicenseValid;           // 0|1 Specifies whether CasaTunes has a valid license. A valid license is required before any additional methods can be called.
-	STRING  MessageID[31];          // Specifies the ID of the current message that should be displayed to the user. See GetMessageInfo(). If it is nothing then you should hide any messages being displayed. There is at most one message displayed at a time.
-	STRING  SessionID[31];          // Specifies the unique ID for the current server session. You should reload your system state information when the SessionID changes.
-	INTEGER TaskCompleted;          // 0|1 If true, there are no active tasks. If false, there is an active task under way. The name of the task and progress is provided by TaskCompleted and TaskPhase, respectively.
-	STRING  TaskPhase[31];          // A string describing the current phase of the initialization progress
-	INTEGER TaskProgress;           // 0..100 Indicates initializing progress.
-	STRING  WebServicesVersion[31]; // The current version of these Web Services
+    INTEGER AppInitialized;         // 0|1 When CasaTunes has finished initializing this value is set to true. An application must not call other methods until this value is set to true (and CasaTunes has a valid license)
+    STRING  CasaTunesVersion[31];   // The current CasaTunes version
+    INTEGER iPodDevicesDocked;      // 0|1 If true, there are one or more iPod devices docked on the music server
+    INTEGER LastChangeEventID;      // Specifies the ID of the last event that changed the system state. You can use this ID to check whether the system state has changed since the previous call the GetApplicationInfo().
+    INTEGER LicenseValid;           // 0|1 Specifies whether CasaTunes has a valid license. A valid license is required before any additional methods can be called.
+    STRING  MessageID[31];          // Specifies the ID of the current message that should be displayed to the user. See GetMessageInfo(). If it is nothing then you should hide any messages being displayed. There is at most one message displayed at a time.
+    STRING  SessionID[31];          // Specifies the unique ID for the current server session. You should reload your system state information when the SessionID changes.
+    INTEGER TaskCompleted;          // 0|1 If true, there are no active tasks. If false, there is an active task under way. The name of the task and progress is provided by TaskCompleted and TaskPhase, respectively.
+    STRING  TaskName[64];           // A string describing the current phase of the initialization progress
+    INTEGER TaskProgress;           // 0..100 Indicates initializing progress.
+    STRING  WebServicesVersion[31]; // The current version of these Web Services
+    STRING  WolMacAddress[24];
 };
 
 /* EXAMPLE
 
 {
     "d": {
-        "__type": "ApplicationInfo:http://CasaTunes.com/WebService/2009/07",
-        "AppInitialized": true,
-        "CasaTunesVersion": "4.00.121017",
-        "LastChangeEventID": 157,
-        "LicenseValid": true,
-        "MessageID": null,
-        "SessionID": "207d20df-0348-4a90-bc9f-e0712eedae20",
-        "TaskCompleted": true,
-        "TaskName": "",
-        "TaskProgress": 100,
-        "WebServicesVersion": "5.4",
-        "WolMacAddress": null,
-        "iPodDevicesDocked": false
+        "__type":"ApplicationInfo:http://CasaTunes.com/WebService/2009/07",
+        "AppInitialized":true,
+        "CasaTunesVersion":"4.00.121017",
+        "LastChangeEventID":157,
+        "LicenseValid":true,
+        "MessageID":null,
+        "SessionID":"207d20df-0348-4a90-bc9f-e0712eedae20",
+        "TaskCompleted":true,
+        "TaskName":"",
+        "TaskProgress":100,
+        "WebServicesVersion":"5.4",
+        "WolMacAddress":null,
+        "iPodDevicesDocked":false
     }
 }
 
 */
 
 STRUCT_APPLICATION_INFO ApplicationInfo;
+
+
+STRUCTURE STRUCT_SYSTEM_INFO
+{
+    STRING  ControllerFeatures[31]; // A bitmap which specifies which features are supported by this controller. See ControllerFeaturesEnum for a definition of the bitmap.
+    INTEGER NumberOfSources;        // Specifies the number of sources supported by this controller.
+    INTEGER NumberOfZoneGroups;     // Specifies the number of zone groups.
+    INTEGER NumberOfZones;          // Specifies the number of zones (rooms) supported by this controller.
+    INTEGER ZonesCustomOrdered;     // 0|1 Specifies whether the order of the zones have been customized. Zones are grouped by Location, and each Location is ordered based on the LocationSortIndex.
+    
+    INTEGER EQMinimum;   // Specifies the minimum value for the equalization settings (Balance, Bass, Treble) for this controller.
+    INTEGER EQMaximum;   // Specifies the maximum value for the equalization settings (Balance, Bass, Treble) for this controller.
+    INTEGER EQIncrement; // Specifies the increment value for the equalization settings (Balance, Bass, Treble) for this controller.
+    
+    INTEGER VolumeMinimum;   // Specifies the minimum value for volume for this controller.
+    INTEGER VolumeMaximum;   // Specifies the maximum value for volume for this controller.
+    INTEGER VolumeIncrement; // Specifies the increment value for volume for this controller.
+};
+
+/* EXAMPLE
+
+{
+    "d": {
+        "__type":"ApplicationInfo:http://CasaTunes.com/WebService/2009/07",
+        "AppInitialized":true,
+        "CasaTunesVersion":"4.00.121017",
+        "LastChangeEventID":157,
+        "LicenseValid":true,
+        "MessageID":null,
+        "SessionID":"207d20df-0348-4a90-bc9f-e0712eedae20",
+        "TaskCompleted":true,
+        "TaskName":"",
+        "TaskProgress":100,
+        "WebServicesVersion":"5.4",
+        "WolMacAddress":null,
+        "iPodDevicesDocked":false
+    }
+}
+
+*/
+
+STRUCT_SYSTEM_INFO SystemInfo;
 
 
 /*
@@ -77,6 +120,12 @@ FUNCTION Post(STRING action, STRING arguments)
     length = LEN(arguments);
     
     MAKESTRING(Request, "POST /CasaTunes/CasaService.svc/%s HTTP/1.1\nHost: %s\nContent-Type: application/json; charset=utf-8\nContent-Length: %u\n\n%s\n\n", action, Host, length, arguments);
+}
+
+INTEGER_FUNCTION BTOI(STRING boolean)
+{
+    IF(LOWER(boolean) = "true") RETURN(1);
+    ELSE                        RETURN(0);
 }
 
 /*
@@ -105,6 +154,36 @@ PUSH GetSystemInfo
 
 // JSON
 
+STRING_FUNCTION GetObject(STRING key, STRING json)
+{
+    INTEGER start, end, i, val, brace_num;
+    
+    start = FIND(key, json);
+    IF(start = 0) RETURN("");
+    
+    start = start + LEN(key) + 2;
+    
+    brace_num = 0;
+    
+    FOR(i = start TO LEN(json))
+    {
+        val = BYTE(json, i);
+        
+        IF(val = 0x7B) // {
+            brace_num = brace_num + 1;
+        ELSE IF(val = 0x7D) // }
+            brace_num = brace_num - 1;
+        
+        IF(brace_num = 0)
+        {
+            end = i;
+            BREAK;
+        }
+    }
+
+    RETURN(MID(json, start, end - start));
+}
+
 STRING_FUNCTION GetValue(STRING key, STRING json)
 {
     INTEGER start, end;
@@ -112,8 +191,10 @@ STRING_FUNCTION GetValue(STRING key, STRING json)
     start = FIND(key, json);
     IF(start = 0) RETURN("");
     
-    start = start + LEN(key) + 5;
-    end = FIND("\"", json, start);
+    start = start + LEN(key) + 2;
+    IF(MID(json, start, 1) = "\"") start = start + 1;
+
+    end = MIN(FIND(",", json, start), FIND("\"", json, start));
     
     RETURN(MID(json, start, end - start));
 }
@@ -124,21 +205,46 @@ CHANGE Response
 {
     STRING http_json[2048], http[1024], json[1024], value[256];
     INTEGER length;
-    
-    http_json = GATHER("}\n\n", Response);
+    TRACE("TRACE:CHANGE Response");
+    http_json = GATHER("}}", Response);
     http = REMOVE("\n\n", http_json);
-    json = REMOVE("\n\n", http_json);
+    json = REMOVE("}}", http_json);
     
     value = GetValue("__type", json);
-    value = REMOVE(":", json);
+    value = REMOVE(":", value);       TRACE("%s", value);
     
     IF(value = "ApplicationInfo:")
     {
-        
+        ApplicationInfo.AppInitialized     = ATOI(GetValue("AppInitialized",     json)); TRACE("    AppInitialized=%u",       ApplicationInfo.AppInitialized);
+        ApplicationInfo.CasaTunesVersion   =      GetValue("CasaTunesVersion",   json);  TRACE("    CasaTunesVersion='%s'",   ApplicationInfo.CasaTunesVersion);
+        ApplicationInfo.LastChangeEventID  = ATOI(GetValue("LastChangeEventID",  json)); TRACE("    LastChangeEventID=%u",    ApplicationInfo.LastChangeEventID);
+        ApplicationInfo.LicenseValid       = BTOI(GetValue("LicenseValid",       json)); TRACE("    LicenseValid=%u",         ApplicationInfo.LicenseValid);
+        ApplicationInfo.MessageID          =      GetValue("MessageID",          json);  TRACE("    MessageID='%s'",          ApplicationInfo.MessageID);
+        ApplicationInfo.SessionID          =      GetValue("SessionID",          json);  TRACE("    SessionID='%s'",          ApplicationInfo.SessionID);
+        ApplicationInfo.TaskCompleted      = BTOI(GetValue("TaskCompleted",      json)); TRACE("    TaskCompleted=%u",        ApplicationInfo.TaskCompleted);
+        ApplicationInfo.TaskName           =      GetValue("TaskName",           json);  TRACE("    TaskName='%s'",           ApplicationInfo.TaskName);
+        ApplicationInfo.TaskProgress       = ATOI(GetValue("TaskProgress",       json)); TRACE("    TaskProgress=%u",         ApplicationInfo.TaskProgress);
+        ApplicationInfo.WebServicesVersion =      GetValue("WebServicesVersion", json);  TRACE("    WebServicesVersion='%s'", ApplicationInfo.WebServicesVersion);
+        ApplicationInfo.WolMacAddress      =      GetValue("WolMacAddress",      json);  TRACE("    WolMacAddress='%s'",      ApplicationInfo.WolMacAddress);
+        ApplicationInfo.iPodDevicesDocked  = BTOI(GetValue("iPodDevicesDocked",  json)); TRACE("    iPodDevicesDocked=%u",    ApplicationInfo.iPodDevicesDocked);
     }
     ELSE IF(value = "SystemInfo:")
     {
+        SystemInfo.ControllerFeatures =      GetValue("ControllerFeatures", json);  TRACE("    ControllerFeatures='%s'", SystemInfo.ControllerFeatures);
+        SystemInfo.NumberOfSources    = ATOI(GetValue("NumberOfSources",    json)); TRACE("    NumberOfSources=%u",      SystemInfo.NumberOfSources);
+        SystemInfo.NumberOfZoneGroups = ATOI(GetValue("NumberOfZoneGroups", json)); TRACE("    NumberOfZoneGroups=%u",   SystemInfo.NumberOfZoneGroups);
+        SystemInfo.NumberOfZones      = ATOI(GetValue("NumberOfZones",      json)); TRACE("    NumberOfZones=%u",        SystemInfo.NumberOfZones);
+        SystemInfo.ZonesCustomOrdered = BTOI(GetValue("ZonesCustomOrdered", json)); TRACE("    ZonesCustomOrdered=%u",   SystemInfo.ZonesCustomOrdered);
         
+        value = GetObject("VolumeSettings", json);
+        SystemInfo.VolumeMinimum   = ATOI(GetValue("Minimum",   value)); TRACE("    VolumeMinimum=%u",   SystemInfo.VolumeMinimum);
+        SystemInfo.VolumeMaximum   = ATOI(GetValue("Maximum",   value)); TRACE("    VolumeMaximum=%u",   SystemInfo.VolumeMaximum);
+        SystemInfo.VolumeIncrement = ATOI(GetValue("Increment", value)); TRACE("    VolumeIncrement=%u", SystemInfo.VolumeIncrement);
+        
+        value = GetObject("EQSettings", json); TRACE("value=%s",value);
+        SystemInfo.EQMinimum   = ATOI(GetValue("Minimum",   value)); TRACE("    EQMinimum=%u",   SystemInfo.EQMinimum);
+        SystemInfo.EQMaximum   = ATOI(GetValue("Maximum",   value)); TRACE("    EQMaximum=%u",   SystemInfo.EQMaximum);
+        SystemInfo.EQIncrement = ATOI(GetValue("Increment", value)); TRACE("    EQIncrement=%u", SystemInfo.EQIncrement);
     }
 }
 
