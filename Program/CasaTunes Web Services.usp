@@ -39,6 +39,8 @@ STRUCTURE STRUCT_APPLICATION_INFO
 
 STRUCT_APPLICATION_INFO ApplicationInfo;
 
+DIGITAL_OUTPUT iPod_Docked;
+
 
 STRUCTURE STRUCT_SYSTEM_INFO
 {
@@ -105,6 +107,8 @@ STRUCTURE STRUCT_ZONE_INFO
 
 STRUCT_ZONE_INFO ZoneInfo;
 
+ANALOG_OUTPUT  Zone_ID, Source_ID;
+
 
 STRUCTURE STRUCT_NOW_PLAYING_INFO
 {
@@ -116,7 +120,7 @@ STRUCTURE STRUCT_NOW_PLAYING_INFO
     STRING  SongArtist[64];
     STRING  SongAlbum[64];
     STRING  SongGenre[64];
-    INTEGER SongReleased;
+    STRING  SongReleased[4];
     
     STRING  MediaArtwork[64];
   //INTEGER MediaFlags;
@@ -140,6 +144,12 @@ STRUCTURE STRUCT_NOW_PLAYING_INFO
 
 STRUCT_NOW_PLAYING_INFO NowPlayingInfo;
 
+ANALOG_OUTPUT Duration, Progress, Progress_Bar;
+STRING_OUTPUT Song_Title, Song_Artist, Song_Album, Song_Genre, Song_Released, Song_Artwork, Next_Song;
+ANALOG_OUTPUT Queue_Count, Queue_Song_Index;
+STRING_OUTPUT Queue_Count_Text;
+ANALOG_OUTPUT Repeat_Mode, Shuffle_Mode;
+
 
 /*
  * Functions
@@ -148,7 +158,7 @@ STRUCT_NOW_PLAYING_INFO NowPlayingInfo;
 FUNCTION Initialize()
 {
     __Initialized__ = 1;
-    __Connected__ = 0;
+    __Connected__   = 0;
 }
 
 FUNCTION Post(STRING action, STRING arguments)
@@ -370,6 +380,8 @@ STRING_FUNCTION ParseJSON(STRING json)
       //ApplicationInfo.WebServicesVersion =      GetValue("WebServicesVersion", json);
       //ApplicationInfo.WolMacAddress      =      GetValue("WolMacAddress",      json);
         ApplicationInfo.iPodDevicesDocked  = BTOI(GetValue("iPodDevicesDocked",  json));
+        
+        iPod_Docked = ApplicationInfo.iPodDevicesDocked;
     }
     ELSE IF(value = "SystemInfo:")
     {
@@ -430,6 +442,9 @@ STRING_FUNCTION ParseJSON(STRING json)
       //ZoneInfo.KeypadLock = BTOI(GetValue("KeypadLock", json));
       //ZoneInfo.MasterMode = BTOI(GetValue("MasterMode", json));
       //ZoneInfo.PartyMode  = BTOI(GetValue("PartyMode",  json));
+        
+        Zone_ID   = ZoneInfo.ID;
+        Source_ID = ZoneInfo.SourceID;
     }
     ELSE IF(value = "NowPlayingMediaItem2:")
     {
@@ -439,11 +454,11 @@ STRING_FUNCTION ParseJSON(STRING json)
         NowPlayingInfo.Progress = ATOI(GetValue("Progress", json));
         
         value = GetValue("DisplayXML", json);
-        NowPlayingInfo.SongTitle    =      GetXMLValue("title",    value);
-        NowPlayingInfo.SongAlbum    =      GetXMLValue("album",    value);
-        NowPlayingInfo.SongArtist   =      GetXMLValue("artist",   value);
-        NowPlayingInfo.SongGenre    =      GetXMLValue("genre",    value);
-        NowPlayingInfo.SongReleased = ATOI(GetXMLValue("released", value));
+        NowPlayingInfo.SongTitle    = GetXMLValue("title",    value);
+        NowPlayingInfo.SongAlbum    = GetXMLValue("album",    value);
+        NowPlayingInfo.SongArtist   = GetXMLValue("artists",  value);
+        NowPlayingInfo.SongGenre    = GetXMLValue("genres",   value);
+        NowPlayingInfo.SongReleased = GetXMLValue("released", value);
         
         value = GetObjectFromArray("Attributes", json, 0);
         NowPlayingInfo.MediaArtwork =      GetValue("Value",      value);
@@ -456,7 +471,7 @@ STRING_FUNCTION ParseJSON(STRING json)
         NowPlayingInfo.QueueCount     = ATOI(GetValue("QueueCount",     json));
       //NowPlayingInfo.QueueDuration  = ATOI(GetValue("QueueDuration",  json));
       //NowPlayingInfo.QueueProgress  = ATOI(GetValue("QueueProgress",  json));
-        NowPlayingInfo.QueueSongIndex = ATOI(GetValue("QueueSongIndex", json));
+        NowPlayingInfo.QueueSongIndex = ATOI(GetValue("QueueSongIndex", json)) + 1;
         
         NowPlayingInfo.RepeatMode  = ATOI(GetValue("RepeatMode",  json));
         NowPlayingInfo.ShuffleMode = BTOI(GetValue("ShuffleMode", json));
@@ -464,6 +479,27 @@ STRING_FUNCTION ParseJSON(STRING json)
       //NowPlayingInfo.SourceLockedByZone   = ATOI(GetValue("SourceLockedByZone",   json));
       //NowPlayingInfo.SourceLockedByZoneID = ATOI(GetValue("SourceLockedByZoneID", json));
       //NowPlayingInfo.Status               = ATOI(GetValue("Status",               json));
+        
+        Duration     = NowPlayingInfo.Duration;
+        Progress     = NowPlayingInfo.Progress;
+        Progress_Bar = MULDIV(NowPlayingInfo.Progress, 100, NowPlayingInfo.Duration);
+        
+        Song_Title    = NowPlayingInfo.SongTitle;
+        Song_Album    = NowPlayingInfo.SongAlbum;
+        Song_Artist   = NowPlayingInfo.SongArtist;
+        Song_Genre    = NowPlayingInfo.SongGenre;
+        Song_Released = NowPlayingInfo.SongReleased;
+        
+        MAKESTRING(Song_Artwork, "http://%s/casatunes/GetImage.ashx?ID=%s", Host, NowPlayingInfo.MediaArtwork);
+        
+        Next_Song = NowPlayingInfo.NextSong;
+        
+        Queue_Count      = NowPlayingInfo.QueueCount;
+        Queue_Song_Index = NowPlayingInfo.QueueSongIndex;
+        MAKESTRING(Queue_Count_Text, "%u of %u", NowPlayingInfo.QueueSongIndex, NowPlayingInfo.QueueCount);
+        
+        Repeat_Mode  = NowPlayingInfo.RepeatMode;
+        Shuffle_Mode = NowPlayingInfo.ShuffleMode;
     }
     ELSE IF(value = "AppStatus:")
     {
