@@ -107,7 +107,7 @@ STRUCTURE STRUCT_ZONE_INFO
 
 STRUCT_ZONE_INFO ZoneInfo;
 
-ANALOG_OUTPUT  Zone_ID, Source_ID;
+ANALOG_OUTPUT  Source_ID;
 
 
 STRUCTURE STRUCT_NOW_PLAYING_INFO
@@ -185,13 +185,15 @@ INTEGER_FUNCTION BTOI(STRING boolean)
 DIGITAL_INPUT GetApplicationInfo;
 PUSH GetApplicationInfo
 {
-    Post("GetApplicationInfo", "{\"d\": null}");
+    Post("GetApplicationInfo", "{\"d\": null }");
 }
 
 DIGITAL_INPUT GetAppStatus;
 PUSH GetAppStatus
 {
-    Post("GetAppStatus", "{\"ZoneID\": 0}");
+    STRING arguments[32];
+    MAKESTRING(arguments, "{\"ZoneID\":%u }", Zone);
+    Post("GetAppStatus", arguments);
 }
 
 // System Information Methods
@@ -199,7 +201,89 @@ PUSH GetAppStatus
 DIGITAL_INPUT GetSystemInfo;
 PUSH GetSystemInfo
 {
-    Post("GetSystemInfo", "{\"d\": null}");
+    Post("GetSystemInfo", "{\"d\":null }");
+}
+
+// Transport Controls 
+
+DIGITAL_INPUT Play;
+PUSH Play
+{
+    STRING arguments[32];
+    MAKESTRING(arguments, "{\"ZoneID\":%u }", Zone);
+    Post("PlaySong", arguments);
+}
+
+DIGITAL_INPUT Pause;
+PUSH Pause
+{
+    STRING arguments[32];
+    MAKESTRING(arguments, "{\"ZoneID\":%u }", Zone);
+    Post("PauseSong", arguments);
+}
+
+DIGITAL_INPUT Stop;
+PUSH Stop
+{
+    STRING arguments[32];
+    MAKESTRING(arguments, "{\"ZoneID\":%u }", Zone);
+    Post("StopSong", arguments);
+}
+
+DIGITAL_INPUT Next;
+PUSH Next
+{
+    STRING arguments[32];
+    MAKESTRING(arguments, "{\"ZoneID\":%u }", Zone);
+    Post("NextSong", arguments);
+}
+
+DIGITAL_INPUT Previous;
+PUSH Previous
+{
+    STRING arguments[32];
+    MAKESTRING(arguments, "{\"ZoneID\":%u }", Zone);
+    Post("PreviousSong", arguments);
+}
+
+DIGITAL_INPUT Shuffle;
+PUSH Shuffle
+{
+    STRING arguments[64];
+    MAKESTRING(arguments, "{\"ZoneID\":%u,\"ShuffleMode\":true }", Zone);
+    Post("SetQueueShuffleMode", arguments);
+}
+
+DIGITAL_INPUT Shuffle_Off;
+PUSH Shuffle_Off
+{
+    STRING arguments[64];
+    MAKESTRING(arguments, "{\"ZoneID\":%u,\"ShuffleMode\":false }", Zone);
+    Post("SetQueueShuffleMode", arguments);
+}
+
+DIGITAL_INPUT Repeat_Queue;
+PUSH Repeat_Queue
+{
+    STRING arguments[64];
+    MAKESTRING(arguments, "{\"ZoneID\":%u,\"RepeatMode\":1 }", Zone);
+    Post("SetQueueRepeatMode", arguments);
+}
+
+DIGITAL_INPUT Repeat_Track;
+PUSH Repeat_Track
+{
+    STRING arguments[64];
+    MAKESTRING(arguments, "{\"ZoneID\":%u,\"RepeatMode\":2 }", Zone);
+    Post("SetQueueRepeatMode", arguments);
+}
+
+DIGITAL_INPUT Repeat_Off;
+PUSH Repeat_Off
+{
+    STRING arguments[64];
+    MAKESTRING(arguments, "{\"ZoneID\":%u,\"RepeatMode\":0 }", Zone);
+    Post("SetQueueRepeatMode", arguments);
 }
 
 /*
@@ -443,7 +527,6 @@ STRING_FUNCTION ParseJSON(STRING json)
       //ZoneInfo.MasterMode = BTOI(GetValue("MasterMode", json));
       //ZoneInfo.PartyMode  = BTOI(GetValue("PartyMode",  json));
         
-        Zone_ID   = ZoneInfo.ID;
         Source_ID = ZoneInfo.SourceID;
     }
     ELSE IF(value = "NowPlayingMediaItem2:")
