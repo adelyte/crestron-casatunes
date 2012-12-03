@@ -1,0 +1,535 @@
+/*
+ * Adelyte Company
+ * www.adelyte.com
+ */
+
+#SYMBOL_NAME "CasaTunes Web Services"
+#CATEGORY "8" // Media Resource
+#DEFAULT_VOLATILE
+#ENABLE_DYNAMIC
+#ENABLE_TRACE
+
+INTEGER __Initialized__, __Connected__, __Parsing__;
+
+BUFFER_INPUT  Response[65534];
+STRING_OUTPUT Request;
+
+STRING_PARAMETER  Host[255];
+INTEGER_PARAMETER Zone;
+
+/*
+ * Classes
+ */
+
+STRUCTURE STRUCT_APPLICATION_INFO
+{
+    INTEGER AppInitialized;        // 0|1 When CasaTunes has finished initializing this value is set to true. An application must not call other methods until this value is set to true (and CasaTunes has a valid license)
+  //STRING  CasaTunesVersion[16];  // The current CasaTunes version
+    INTEGER iPodDevicesDocked;     // 0|1 If true, there are one or more iPod devices docked on the music server
+    INTEGER LastChangeEventID;     // Specifies the ID of the last event that changed the system state. You can use this ID to check whether the system state has changed since the previous call the GetApplicationInfo().
+  //INTEGER LicenseValid;          // 0|1 Specifies whether CasaTunes has a valid license. A valid license is required before any additional methods can be called.
+  //STRING  MessageID[32];         // Specifies the ID of the current message that should be displayed to the user. See GetMessageInfo(). If it is nothing then you should hide any messages being displayed. There is at most one message displayed at a time.
+  //STRING  SessionID[64];         // Specifies the unique ID for the current server session. You should reload your system state information when the SessionID changes.
+    INTEGER TaskCompleted;         // 0|1 If true, there are no active tasks. If false, there is an active task under way. The name of the task and progress is provided by TaskCompleted and TaskPhase, respectively.
+    STRING  TaskName[64];          // A string describing the current phase of the initialization progress
+    INTEGER TaskProgress;          // 0..100 Indicates initializing progress.
+  //STRING  WebServicesVersion[8]; // The current version of these Web Services
+  //STRING  WolMacAddress[24];
+};
+
+STRUCT_APPLICATION_INFO ApplicationInfo;
+
+DIGITAL_OUTPUT iPod_Docked;
+
+
+STRUCTURE STRUCT_SYSTEM_INFO
+{
+  //STRING  ControllerFeatures[8]; // A bitmap which specifies which features are supported by this controller. See ControllerFeaturesEnum for a definition of the bitmap.
+    INTEGER NumberOfSources;       // Specifies the number of sources supported by this controller.
+  //INTEGER NumberOfZoneGroups;    // Specifies the number of zone groups.
+    INTEGER NumberOfZones;         // Specifies the number of zones (rooms) supported by this controller.
+  //INTEGER ZonesCustomOrdered;    // 0|1 Specifies whether the order of the zones have been customized. Zones are grouped by Location, and each Location is ordered based on the LocationSortIndex.
+    
+  //INTEGER EQMinimum;   // Specifies the minimum value for the equalization settings (Balance, Bass, Treble) for this controller.
+  //INTEGER EQMaximum;   // Specifies the maximum value for the equalization settings (Balance, Bass, Treble) for this controller.
+  //INTEGER EQIncrement; // Specifies the increment value for the equalization settings (Balance, Bass, Treble) for this controller.
+    
+    INTEGER VolumeMinimum;   // Specifies the minimum value for volume for this controller.
+    INTEGER VolumeMaximum;   // Specifies the maximum value for volume for this controller.
+  //INTEGER VolumeIncrement; // Specifies the increment value for volume for this controller.
+};
+
+STRUCT_SYSTEM_INFO SystemInfo;
+
+
+STRUCTURE STRUCT_ZONE_INFO
+{
+    STRING  Label[64];
+  //INTEGER GroupInfo;
+    INTEGER ID;
+  //STRING  Location[64];
+  //INTEGER LocationSortIndex;
+
+  //INTEGER Balance;
+  //INTEGER Bass;
+  //INTEGER Treble;
+  //INTEGER Loudness;
+
+    INTEGER Power;
+
+    INTEGER Volume;
+  //INTEGER VolumeControlType;
+    INTEGER MaxVolume;
+  //INTEGER PowerOnVolume;
+  //INTEGER ResetPowerOnVolume;
+  //INTEGER FixedVolume;
+  //INTEGER FixedVolumeEnabled;
+  //INTEGER PageVolume;
+    INTEGER Mute;
+  //INTEGER EnableMuteOrPage;
+
+    INTEGER SourceID;
+    STRING  EnabledSources[16];
+  //INTEGER IsSourceLocked;
+  //INTEGER IsSourceShared;
+
+  //INTEGER SleepEnabled;
+  //INTEGER SleepEventSchedule;
+  //INTEGER WakeupEventSchedule;
+  //INTEGER WakeupScheduled;
+
+  //INTEGER Hidden;
+  //INTEGER DND;
+  //INTEGER KeypadLock;
+  //INTEGER MasterMode;
+  //INTEGER PartyMode;
+};
+
+STRUCT_ZONE_INFO ZoneInfo;
+
+ANALOG_OUTPUT  Zone_ID, Source_ID;
+
+
+STRUCTURE STRUCT_NOW_PLAYING_INFO
+{
+  //STRING  Controls[16];
+    
+    INTEGER Duration;
+    INTEGER Progress;
+    STRING  SongTitle[64];
+    STRING  SongArtist[64];
+    STRING  SongAlbum[64];
+    STRING  SongGenre[64];
+    STRING  SongReleased[4];
+    
+    STRING  MediaArtwork[64];
+  //INTEGER MediaFlags;
+  //STRING  MediaID[16];
+  //INTEGER MediaItems;
+  //STRING  MediaName[64];
+    
+    STRING  NextSong[64];
+    INTEGER QueueCount;
+  //INTEGER QueueDuration;
+  //INTEGER QueueProgress;
+    INTEGER QueueSongIndex;
+    
+    INTEGER RepeatMode;
+    INTEGER ShuffleMode;
+    
+  //INTEGER SourceLockedByZone;
+  //INTEGER SourceLockedByZoneID;
+  //INTEGER Status;
+};
+
+STRUCT_NOW_PLAYING_INFO NowPlayingInfo;
+
+ANALOG_OUTPUT Duration, Progress, Progress_Bar;
+STRING_OUTPUT Song_Title, Song_Artist, Song_Album, Song_Genre, Song_Released, Song_Artwork, Next_Song;
+ANALOG_OUTPUT Queue_Count, Queue_Song_Index;
+STRING_OUTPUT Queue_Count_Text;
+ANALOG_OUTPUT Repeat_Mode, Shuffle_Mode;
+
+
+/*
+ * Functions
+ */
+
+FUNCTION Initialize()
+{
+    __Initialized__ = 1;
+    __Connected__   = 0;
+}
+
+FUNCTION Post(STRING action, STRING arguments)
+{
+    INTEGER length;
+    
+    length = LEN(arguments);
+    
+    MAKESTRING(Request, "POST /CasaTunes/CasaService.svc/%s HTTP/1.1\nHost: %s\nContent-Type: application/json; charset=utf-8\nContent-Length: %u\n\n%s\n\n", action, Host, length, arguments);
+}
+
+INTEGER_FUNCTION BTOI(STRING boolean)
+{
+    IF(LOWER(boolean) = "true") RETURN(1);
+    ELSE                        RETURN(0);
+}
+
+/*
+ * Events
+ */
+
+// Application Information Methods
+
+DIGITAL_INPUT GetApplicationInfo;
+PUSH GetApplicationInfo
+{
+    Post("GetApplicationInfo", "{\"d\": null}");
+}
+
+DIGITAL_INPUT GetAppStatus;
+PUSH GetAppStatus
+{
+    Post("GetAppStatus", "{\"ZoneID\": 0}");
+}
+
+// System Information Methods
+
+DIGITAL_INPUT GetSystemInfo;
+PUSH GetSystemInfo
+{
+    Post("GetSystemInfo", "{\"d\": null}");
+}
+
+/*
+ * Response Parsing
+ */
+
+// JSON
+INTEGER_FUNCTION FindClosingBracket(STRING bracket, STRING source, INTEGER start)
+{
+    INTEGER i, bracket_num, open_bracket_val, close_bracket_val, byte_val;
+    
+    IF(start > LEN(source))
+        GENERATEUSERNOTICE("FindClosingBracket('%s', '%s', %u): starting index %u out of bounds %u", bracket, LEFT(source, MIN(11, LEN(source))), start, start, LEN(source));
+    
+    open_bracket_val  = BYTE(bracket, 1);
+    close_bracket_val = BYTE(bracket, 2);
+    
+    bracket_num = 0;
+    
+    FOR(i = start TO LEN(source))
+    {
+        byte_val = BYTE(source, i);
+        
+        IF(byte_val = open_bracket_val)
+            bracket_num = bracket_num + 1;
+        ELSE IF(byte_val = close_bracket_val)
+            bracket_num = bracket_num - 1;
+        
+        IF(bracket_num = 0)
+        {
+            RETURN(i);
+        }
+    }
+}
+
+STRING_FUNCTION GetArray(STRING key, STRING json)
+{
+    INTEGER start, end, i, val, bracket_num;
+    
+    RESIZESTRING(key, LEN(key) + 3);
+    key = "\"" + key + "\":";
+    
+    start = FIND(key, json);
+    IF(start = 0) RETURN("");
+    
+    start = FIND("[", json, start);
+    
+    end = FindClosingBracket("[]", json, start);
+
+    IF(end > start)
+        RETURN(MID(json, start, end - start));
+    ELSE
+        RETURN("");
+}
+
+STRING_FUNCTION GetObject(STRING key, STRING json)
+{
+    INTEGER start, end, i, val, brace_num;
+    
+    IF(LEN(key) > 0) // Return object with key.
+    {
+        RESIZESTRING(key, LEN(key) + 3);
+        key = "\"" + key + "\":";
+    
+        start = FIND(key, json);
+    }
+    ELSE // Return first object.
+        start = FIND("{", json);
+    
+    IF(start = 0) RETURN("");
+    
+    start = FIND("{", json, start);
+    end   = FindClosingBracket("{}", json, start);
+    
+    IF(end > start)
+        RETURN(MID(json, start, end - start));
+    ELSE
+        RETURN("");
+}
+
+STRING_FUNCTION GetObjectFromArray(STRING key, STRING json, INTEGER index)
+{
+    STRING  array[4096];
+    INTEGER i;
+    
+    array = GetArray(key, json);
+    
+    FOR(i = 0 TO index)
+    {
+        IF(i = index)
+            RETURN(GetObject("", array));
+        ELSE
+            array = RIGHT(array, LEN(array) - LEN(GetObject("", array)));
+        
+        TRACE("Found object %u in array", i);
+    } 
+}
+
+STRING_FUNCTION GetValue(STRING key, STRING json)
+{
+    INTEGER start, end, searching;
+    
+    RESIZESTRING(key, LEN(key) + 3);
+    key = "\"" + key + "\":";
+    
+    start = FIND(key, json);
+    IF(start = 0) RETURN("");
+    start = start + LEN(key);
+    
+    IF(BYTE(json, start) = 0x22)
+    {
+        start = start + 1;
+        end = 0;
+        searching = 1;
+
+        WHILE(searching = 1)
+        {
+            end = FIND("\"", json, MAX(start, end + 1));
+
+            IF(BYTE(json, end - 1) != 0x5C) // Quote is not escaped.
+                searching = 0;
+        }
+    }
+    ELSE
+        end = FIND(",", json, start);
+    
+    TRACE("%s%s", key, MID(json, start, end - start));
+    IF(end > start)
+        RETURN(MID(json, start, end - start));
+    ELSE
+        RETURN("");
+}
+
+
+// XML
+
+STRING_FUNCTION GetXMLValue(STRING key, STRING xml)
+{
+    INTEGER start, end;
+    
+    RESIZESTRING(key, LEN(key) + 4);
+    key = "<" + key + ">";
+    
+    start = FIND(key, xml);
+    IF(start = 0) RETURN("");
+    start = start + LEN(key);
+    
+    key = "<\\/" + RIGHT(key, LEN(key) - 1);
+    end = FIND(key, xml);
+    
+    TRACE("%s%s", key, MID(xml, start, end - start));
+    IF(end > start)
+        RETURN(MID(xml, start, end - start));
+    ELSE
+        RETURN("");
+}
+
+// HTTP Response
+
+STRING_FUNCTION ParseJSON(STRING json)
+{
+    STRING value[4096];
+    
+    value = GetValue("__type", json);
+    value = REMOVE(":", value);
+    
+    IF(value = "ApplicationInfo:")
+    {
+        ApplicationInfo.AppInitialized     = ATOI(GetValue("AppInitialized",     json));
+      //ApplicationInfo.CasaTunesVersion   =      GetValue("CasaTunesVersion",   json);
+        ApplicationInfo.LastChangeEventID  = ATOI(GetValue("LastChangeEventID",  json));
+      //ApplicationInfo.LicenseValid       = BTOI(GetValue("LicenseValid",       json));
+      //ApplicationInfo.MessageID          =      GetValue("MessageID",          json);
+      //ApplicationInfo.SessionID          =      GetValue("SessionID",          json);
+        ApplicationInfo.TaskCompleted      = BTOI(GetValue("TaskCompleted",      json));
+        ApplicationInfo.TaskName           =      GetValue("TaskName",           json);
+        ApplicationInfo.TaskProgress       = ATOI(GetValue("TaskProgress",       json));
+      //ApplicationInfo.WebServicesVersion =      GetValue("WebServicesVersion", json);
+      //ApplicationInfo.WolMacAddress      =      GetValue("WolMacAddress",      json);
+        ApplicationInfo.iPodDevicesDocked  = BTOI(GetValue("iPodDevicesDocked",  json));
+        
+        iPod_Docked = ApplicationInfo.iPodDevicesDocked;
+    }
+    ELSE IF(value = "SystemInfo:")
+    {
+      //SystemInfo.ControllerFeatures =      GetValue("ControllerFeatures", json);
+        SystemInfo.NumberOfSources    = ATOI(GetValue("NumberOfSources",    json));
+      //SystemInfo.NumberOfZoneGroups = ATOI(GetValue("NumberOfZoneGroups", json));
+        SystemInfo.NumberOfZones      = ATOI(GetValue("NumberOfZones",      json));
+      //SystemInfo.ZonesCustomOrdered = BTOI(GetValue("ZonesCustomOrdered", json));
+        
+        value = GetObject("VolumeSettings", json);
+        SystemInfo.VolumeMinimum   = ATOI(GetValue("Minimum",   value));
+        SystemInfo.VolumeMaximum   = ATOI(GetValue("Maximum",   value));
+      //SystemInfo.VolumeIncrement = ATOI(GetValue("Increment", value));
+        
+      //value = GetObject("EQSettings", json);
+      //SystemInfo.EQMinimum   = ATOI(GetValue("Minimum",   value));
+      //SystemInfo.EQMaximum   = ATOI(GetValue("Maximum",   value));
+      //SystemInfo.EQIncrement = ATOI(GetValue("Increment", value));
+    }
+    ELSE IF(value = "ZoneInfo:")
+    {
+        ZoneInfo.Label             =      GetValue("Name",              json);
+      //ZoneInfo.GroupInfo         = ATOI(GetValue("ZoneGroupInfo",     json));
+        ZoneInfo.ID                = ATOI(GetValue("ZoneID",            json));
+      //ZoneInfo.Location          =      GetValue("Location",          json);
+      //ZoneInfo.LocationSortIndex = ATOI(GetValue("LocationSortIndex", json));
+        
+      //ZoneInfo.Balance  = ATOI(GetValue("Balance",  json));
+      //ZoneInfo.Bass     = ATOI(GetValue("Bass",     json));
+      //ZoneInfo.Treble   = ATOI(GetValue("Trable",   json));
+      //ZoneInfo.Loudness = BTOI(GetValue("Loudness", json));
+        
+        ZoneInfo.Power = BTOI(GetValue("Power", json));
+        
+        ZoneInfo.Volume             = ATOI(GetValue("Volume",             json));
+      //ZoneInfo.VolumeControlType  = ATOI(GetValue("VolumeControlType",  json));
+        ZoneInfo.MaxVolume          = ATOI(GetValue("MaxVolume",          json));
+      //ZoneInfo.PowerOnVolume      = ATOI(GetValue("PowerOnVolume",      json));
+      //ZoneInfo.ResetPowerOnVolume = BTOI(GetValue("ResetPowerOnVolume", json));
+      //ZoneInfo.FixedVolume        = ATOI(GetValue("FixedVolume",        json));
+      //ZoneInfo.FixedVolumeEnabled = BTOI(GetValue("FixedVolumeEnabled", json));
+      //ZoneInfo.PageVolume         = ATOI(GetValue("PageVolume",         json));
+        ZoneInfo.Mute               = BTOI(GetValue("Mute",               json));
+      //ZoneInfo.EnableMuteOrPage   = ATOI(GetValue("EnableMuteOrPage",   json));
+        
+        ZoneInfo.SourceID       = ATOI(GetValue("SourceID",       json));
+        ZoneInfo.EnabledSources =      GetValue("EnabledSources", json);
+      //ZoneInfo.IsSourceLocked = BTOI(GetValue("IsSourceLocked", json));
+      //ZoneInfo.IsSourceShared = BTOI(GetValue("IsSourceShared", json));
+        
+      //ZoneInfo.SleepEnabled        = BTOI(GetValue("SleepEnabled",        json));
+      //ZoneInfo.SleepEventSchedule  = ATOI(GetValue("SleepEventSchedule",  json));
+      //ZoneInfo.WakeupEventSchedule = ATOI(GetValue("WakeupEventSchedule", json));
+      //ZoneInfo.WakeupScheduled     = ATOI(GetValue("WakeupScheduled",     json));
+        
+      //ZoneInfo.Hidden     = BTOI(GetValue("Hidden",     json));
+      //ZoneInfo.DND        = BTOI(GetValue("DND",        json));
+      //ZoneInfo.KeypadLock = BTOI(GetValue("KeypadLock", json));
+      //ZoneInfo.MasterMode = BTOI(GetValue("MasterMode", json));
+      //ZoneInfo.PartyMode  = BTOI(GetValue("PartyMode",  json));
+        
+        Zone_ID   = ZoneInfo.ID;
+        Source_ID = ZoneInfo.SourceID;
+    }
+    ELSE IF(value = "NowPlayingMediaItem2:")
+    {
+      //NowPlayingInfo.Controls =      GetValue("Controls", json);
+        
+        NowPlayingInfo.Duration = ATOI(GetValue("Duration", json));
+        NowPlayingInfo.Progress = ATOI(GetValue("Progress", json));
+        
+        value = GetValue("DisplayXML", json);
+        NowPlayingInfo.SongTitle    = GetXMLValue("title",    value);
+        NowPlayingInfo.SongAlbum    = GetXMLValue("album",    value);
+        NowPlayingInfo.SongArtist   = GetXMLValue("artists",  value);
+        NowPlayingInfo.SongGenre    = GetXMLValue("genres",   value);
+        NowPlayingInfo.SongReleased = GetXMLValue("released", value);
+        
+        value = GetObjectFromArray("Attributes", json, 0);
+        NowPlayingInfo.MediaArtwork =      GetValue("Value",      value);
+      //NowPlayingInfo.MediaFlags   = ATOI(GetValue("MediaFlags", json));
+      //NowPlayingInfo.MediaID      =      GetValue("MediaID",    json);
+      //NowPlayingInfo.MediaItems   = ATOI(GetValue("MediaItems", json));
+      //NowPlayingInfo.MediaName    =      GetValue("MediaName",  json);
+        
+        NowPlayingInfo.NextSong       =      GetValue("NextSong",       json);
+        NowPlayingInfo.QueueCount     = ATOI(GetValue("QueueCount",     json));
+      //NowPlayingInfo.QueueDuration  = ATOI(GetValue("QueueDuration",  json));
+      //NowPlayingInfo.QueueProgress  = ATOI(GetValue("QueueProgress",  json));
+        NowPlayingInfo.QueueSongIndex = ATOI(GetValue("QueueSongIndex", json)) + 1;
+        
+        NowPlayingInfo.RepeatMode  = ATOI(GetValue("RepeatMode",  json));
+        NowPlayingInfo.ShuffleMode = BTOI(GetValue("ShuffleMode", json));
+        
+      //NowPlayingInfo.SourceLockedByZone   = ATOI(GetValue("SourceLockedByZone",   json));
+      //NowPlayingInfo.SourceLockedByZoneID = ATOI(GetValue("SourceLockedByZoneID", json));
+      //NowPlayingInfo.Status               = ATOI(GetValue("Status",               json));
+        
+        Duration     = NowPlayingInfo.Duration;
+        Progress     = NowPlayingInfo.Progress;
+        Progress_Bar = MULDIV(NowPlayingInfo.Progress, 100, NowPlayingInfo.Duration);
+        
+        Song_Title    = NowPlayingInfo.SongTitle;
+        Song_Album    = NowPlayingInfo.SongAlbum;
+        Song_Artist   = NowPlayingInfo.SongArtist;
+        Song_Genre    = NowPlayingInfo.SongGenre;
+        Song_Released = NowPlayingInfo.SongReleased;
+        
+        MAKESTRING(Song_Artwork, "http://%s/casatunes/GetImage.ashx?ID=%s", Host, NowPlayingInfo.MediaArtwork);
+        
+        Next_Song = NowPlayingInfo.NextSong;
+        
+        Queue_Count      = NowPlayingInfo.QueueCount;
+        Queue_Song_Index = NowPlayingInfo.QueueSongIndex;
+        MAKESTRING(Queue_Count_Text, "%u of %u", NowPlayingInfo.QueueSongIndex, NowPlayingInfo.QueueCount);
+        
+        Repeat_Mode  = NowPlayingInfo.RepeatMode;
+        Shuffle_Mode = NowPlayingInfo.ShuffleMode;
+    }
+    ELSE IF(value = "AppStatus:")
+    {
+        ParseJSON(GetObject("AppInfo", json));
+        ParseJSON(GetObjectFromArray("Zones", json, Zone));
+        ParseJSON(GetObjectFromArray("NowPlayingInfo", json, ZoneInfo.SourceID));
+    }
+}
+
+CHANGE Response
+{
+    STRING  http[1024], json[4096];
+    
+    json = GATHER("}}",   Response, 75);
+    IF(json = "")
+    {
+        CLEARBUFFER(Response);
+        TERMINATEEVENT;
+    }
+    
+    http = REMOVE("\n\n", json);
+    
+    ParseJSON(json);
+}
+
+/*
+ * Runtime
+ */
+
+FUNCTION Main()
+{
+    Initialize();
+}
