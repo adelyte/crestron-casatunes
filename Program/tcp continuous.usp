@@ -1,0 +1,58 @@
+/*
+ * Adelyte Company
+ * www.adelyte.com 
+ */
+
+// Compiler Directives
+#SYMBOL_NAME "TCP Continuous"
+#CATEGORY "46" "Ethernet"  // Custom
+#DEFAULT_VOLATILE
+
+// Constants
+#DEFINE_CONSTANT RETRY_SHORT 1500
+#DEFINE_CONSTANT RETRY_LONG  6000
+
+
+// Inputs and Outputs
+DIGITAL_INPUT  Connect_FB;
+ANALOG_INPUT   Status;
+DIGITAL_OUTPUT Connect;
+
+
+// Commands
+CHANGE Status
+{
+  WAIT(RETRY_SHORT, Retry)
+  {
+    Connect = 0;
+    PROCESSLOGIC();
+    Connect = 1;
+  }
+  
+  SWITCH(Status)
+  {
+    CASE(2):  // Connected.
+    {
+      CANCELWAIT(Retry);
+    }
+    CASE(7):  // DNS lookup failed.
+    {
+      RETIMEWAIT(RETRY_LONG, Retry);
+    }
+    DEFAULT:  // All other values.
+    {
+      RETIMEWAIT(RETRY_SHORT, Retry);
+    }
+  }
+}
+
+
+// Runtime
+FUNCTION Main()
+{
+  SIGNED_INTEGER error;
+  
+  error = WAITFORINITIALIZATIONCOMPLETE();
+  
+  Connect = 1;  // Make the TCP connection at runtime.
+}
