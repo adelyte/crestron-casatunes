@@ -228,6 +228,19 @@ DIGITAL_INPUT Shuffle;
 PUSH Shuffle
 {
     STRING arguments[64];
+    
+    IF(Shuffle_Mode = 0)
+        MAKESTRING(arguments, "{\"ZoneID\":%u,\"ShuffleMode\":true }", Zone);
+    ELSE
+        MAKESTRING(arguments, "{\"ZoneID\":%u,\"ShuffleMode\":false }", Zone);
+    
+    Post("SetQueueShuffleMode", arguments);
+}
+
+DIGITAL_INPUT Shuffle_On;
+PUSH Shuffle_On
+{
+    STRING arguments[64];
     MAKESTRING(arguments, "{\"ZoneID\":%u,\"ShuffleMode\":true }", Zone);
     Post("SetQueueShuffleMode", arguments);
 }
@@ -238,6 +251,14 @@ PUSH Shuffle_Off
     STRING arguments[64];
     MAKESTRING(arguments, "{\"ZoneID\":%u,\"ShuffleMode\":false }", Zone);
     Post("SetQueueShuffleMode", arguments);
+}
+
+DIGITAL_INPUT Repeat;
+PUSH Repeat
+{
+    STRING arguments[64];
+    MAKESTRING(arguments, "{\"ZoneID\":%u,\"RepeatMode\":%u }", Zone, (Repeat_Mode + 1) MOD 3);
+    Post("SetQueueRepeatMode", arguments);
 }
 
 DIGITAL_INPUT Repeat_Queue;
@@ -335,7 +356,7 @@ PUSH Back
     ELSE
         ClearLevel(Browse_Level + 1);
     
-    MAKESTRING(arguments, "{\"CollectionID\":\"%s\",\"filter\":null,\"MaxItems\":%u,\"StartIndex\":%u }", Browse_Info[Browse_Level].Title_ID, MAX_LINES, Browse_Info[Browse_Level].Start_Index);
+    MAKESTRING(arguments, "{\"CollectionID\":\"%s\",\"filter\":null,\"MaxItems\":%u,\"StartIndex\":%u,\"Options\":1 }", Browse_Info[Browse_Level].Title_ID, MAX_LINES, Browse_Info[Browse_Level].Start_Index);
     Post("GetMediaCollection2", arguments);
 }
 
@@ -346,7 +367,7 @@ PUSH Scroll_Up
     
     Browse_Info[Browse_Level].Start_Index = Browse_Info[Browse_Level].Start_Index - MIN(Browse_Info[Browse_Level].Start_Index, MAX_LINES);
     
-    MAKESTRING(arguments, "{\"CollectionID\":\"%s\",\"filter\":null,\"MaxItems\":%u,\"StartIndex\":%u }", Browse_Info[Browse_Level].Title_ID, MAX_LINES, Browse_Info[Browse_Level].Start_Index);
+    MAKESTRING(arguments, "{\"CollectionID\":\"%s\",\"filter\":null,\"MaxItems\":%u,\"StartIndex\":%u,\"Options\":1 }", Browse_Info[Browse_Level].Title_ID, MAX_LINES, Browse_Info[Browse_Level].Start_Index);
     Post("GetMediaCollection2", arguments);
 }
 
@@ -359,7 +380,7 @@ PUSH Scroll_Down
     ELSE
         Browse_Info[Browse_Level].Start_Index = MIN(Browse_Info[Browse_Level].Start_Index + MAX_LINES, Browse_Info[Browse_Level].Total_Items - MAX_LINES);
     
-    MAKESTRING(arguments, "{\"CollectionID\":\"%s\",\"filter\":null,\"MaxItems\":%u,\"StartIndex\":%u }", Browse_Info[Browse_Level].Title_ID, MAX_LINES, Browse_Info[Browse_Level].Start_Index);
+    MAKESTRING(arguments, "{\"CollectionID\":\"%s\",\"filter\":null,\"MaxItems\":%u,\"StartIndex\":%u,\"Options\":1 }", Browse_Info[Browse_Level].Title_ID, MAX_LINES, Browse_Info[Browse_Level].Start_Index);
     Post("GetMediaCollection2", arguments);
 }
 
@@ -387,7 +408,7 @@ PUSH Line_Select
         Back_Available = 1;
         
         Browse_Info[Browse_Level].Start_Index = 0;
-        MAKESTRING(arguments, "{\"CollectionID\":\"%s\",\"filter\":null,\"MaxItems\":%u,\"StartIndex\":0 }", Browse_Line[line].ID, MAX_LINES);
+        MAKESTRING(arguments, "{\"CollectionID\":\"%s\",\"filter\":null,\"MaxItems\":%u,\"StartIndex\":0,\"Options\":1 }", Browse_Line[line].ID, MAX_LINES);
         Post("GetMediaCollection2", arguments);
     }
 }
@@ -658,7 +679,10 @@ STRING_FUNCTION ParseJSON(STRING json)
         Song_Released = GetXMLValue("released", value);
         
         value = GetObjectFromArray("Attributes", json, 0);
-        MAKESTRING(Song_Artwork, "http://%s/casatunes/GetImage.ashx?ID=%s", Host, GetValue("Value", value));
+        IF(LEFT(value, 4) = "http")
+            Song_Artwork = value;
+        ELSE
+            MAKESTRING(Song_Artwork, "http://%s/casatunes/api/images/%s.jpg", Host, GetValue("Value", value));
         
         Next_Song        =      GetValue("NextSong",       json);
         Queue_Count      = ATOI(GetValue("QueueCount",     json));
@@ -687,7 +711,12 @@ STRING_FUNCTION ParseJSON(STRING json)
             i = i + 1;
         }
         
-        Browse_Scroll_Bar = MULDIV(Browse_Info[Browse_Level].Start_Index + MAX_LINES, 65535, MAX(Browse_Info[Browse_Level].Total_Items, MAX_LINES));
+        IF(Browse_Info[Browse_Level].Total_Items <= MAX_LINES)
+            Browse_Scroll_Bar = 65535;
+        ELSE IF(Browse_Info[Browse_Level].Start_Index + MAX_LINES >= Browse_Info[Browse_Level].Total_Items)
+            Browse_Scroll_Bar = 0;
+        ELSE
+            Browse_Scroll_Bar = MULDIV(Browse_Info[Browse_Level].Total_Items - Browse_Info[Browse_Level].Start_Index, 65535, Browse_Info[Browse_Level].Total_Items);
         
         Browse_Info[Browse_Level].Title_ID = GetValue("ID", json);
         Browse_Title                       = GetValue("Name", json);
@@ -741,5 +770,9 @@ CHANGE Response
 
 FUNCTION Main()
 {
+    SIGNED_INTEGER error;
+  
+    error = WAITFORINITIALIZATIONCOMPLETE();
+    
     Initialize();
 }
