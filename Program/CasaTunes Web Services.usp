@@ -7,7 +7,7 @@
 #CATEGORY "8" // Media Resource
 #DEFAULT_VOLATILE
 #ENABLE_DYNAMIC
-//#ENABLE_TRACE
+#ENABLE_TRACE
 
 INTEGER __Initialized__, __Connected__, __Parsing__;
 
@@ -90,15 +90,15 @@ STRUCTURE STRUCT_NOW_PLAYING_INFO
 //STRUCT_NOW_PLAYING_INFO NowPlayingInfo;
 
 ANALOG_OUTPUT Duration, Progress, Progress_Bar;
-STRING_OUTPUT Song_Title, Song_Artist, Song_Album, Song_Genre, Song_Released, Song_Artwork, Next_Song;
+STRING_OUTPUT Song_Title, Song_Artist, Song_Album, Song_Station, Song_Genre, Song_Released, Song_Artwork, Next_Song;
 ANALOG_OUTPUT Queue_Count, Queue_Song_Index;
 STRING_OUTPUT Queue_Count_Text;
 ANALOG_OUTPUT Repeat_Mode, Shuffle_Mode;
 
 
-#DEFINE_CONSTANT MAX_LEVELS 10
-#DEFINE_CONSTANT MAX_LINES  10
-#DEFINE_CONSTANT ID_LEN     48 
+#DEFINE_CONSTANT MAX_LEVELS  10
+#DEFINE_CONSTANT MAX_LINES   10
+#DEFINE_CONSTANT ID_LEN     256 
 
 STRUCTURE STRUCT_BROWSE_INFO
 {
@@ -323,7 +323,7 @@ FUNCTION PlayOrAddSelected(INTEGER mode)
     // 1 - Add To Queue
     // 2 - Play Now and Add To Queue
     
-    STRING arguments[128];
+    STRING arguments[256];
     
     MAKESTRING(arguments, "{\"AddToQueue\":%u,\"Filter\":null,\"ItemID\":\"%s\",\"ZoneID\":%u }", mode, Browse_Line[Browse_Info[Browse_Level].Selected_Line].ID, Zone);
     Post("PlayMediaCollectionOrItem2", arguments);
@@ -347,7 +347,7 @@ PUSH Play_Now_And_Add_To_Queue
 DIGITAL_INPUT Back;
 PUSH Back
 {
-    STRING arguments[128];
+    STRING arguments[256];
     
     Browse_Level = Browse_Level - MIN(Browse_Level, 1);
 
@@ -363,7 +363,7 @@ PUSH Back
 DIGITAL_INPUT Scroll_Up, Scroll_Down;
 PUSH Scroll_Up
 {
-    STRING  arguments[128];
+    STRING  arguments[256];
     
     Browse_Info[Browse_Level].Start_Index = Browse_Info[Browse_Level].Start_Index - MIN(Browse_Info[Browse_Level].Start_Index, MAX_LINES);
     
@@ -373,7 +373,7 @@ PUSH Scroll_Up
 
 PUSH Scroll_Down
 {
-    STRING  arguments[128];
+    STRING  arguments[256];
     
     IF(Browse_Info[Browse_Level].Total_Items <= MAX_LINES)
         Browse_Info[Browse_Level].Start_Index = 0;
@@ -383,25 +383,36 @@ PUSH Scroll_Down
     MAKESTRING(arguments, "{\"CollectionID\":\"%s\",\"filter\":null,\"MaxItems\":%u,\"StartIndex\":%u,\"Options\":1 }", Browse_Info[Browse_Level].Title_ID, MAX_LINES, Browse_Info[Browse_Level].Start_Index);
     Post("GetMediaCollection2", arguments);
 }
+                               
+#DEFINE_CONSTANT FLAG_TRACK   0x1
+#DEFINE_CONSTANT FLAG_STREAM  0x2
+#DEFINE_CONSTANT FLAG_STATION 0x4
+
+#DEFINE_CONSTANT FLAG_ALLOW_QUEUE 0x1000
 
 DIGITAL_INPUT Line_Select[MAX_LINES];
 PUSH Line_Select
 {
-    STRING  arguments[128];
+    STRING  arguments[256];
     INTEGER line;
 
     line = GETLASTMODIFIEDARRAYINDEX();
     
-    IF(Browse_Line[line].Flags = 4097) // Music Track
+    IF( (Browse_Line[line].Flags & FLAG_TRACK)  || // Music Track
+        (Browse_Line[line].Flags & FLAG_STREAM) || // Music Stream
+        (Browse_Line[line].Flags & FLAG_STATION) ) // Radio Station
     {
-        Browse_Info[Browse_Level].Selected_Line = line;
-        PULSE(1, Play_Or_Queue_Prompt);
+        IF(Browse_Line[line].Flags & FLAG_ALLOW_QUEUE)
+        {
+            Browse_Info[Browse_Level].Selected_Line = line;
+            PULSE(1, Play_Or_Queue_Prompt);
+        }
+        ELSE
+        {
+            Browse_Info[Browse_Level].Selected_Line = line;
+            PlayOrAddSelected(0);
+        }
     }
-    //ELSE IF(Browse_Line[line].Flags = 8) // Internet Radio
-    //{
-    //    Browse_Info[Browse_Level].Selected_Line = line;
-    //    PlayOrAddSelected(0);
-    //}
     ELSE
     {
         Browse_Level   = MIN(Browse_Level + 1, MAX_LEVELS);
@@ -420,7 +431,7 @@ PUSH Line_Select
 
 // JSON
 
-#DEFINE_CONSTANT JSON_LEN 30000
+#DEFINE_CONSTANT JSON_LEN 65534
 
 INTEGER_FUNCTION FindClosingBracket(STRING bracket, STRING source, INTEGER start)
 {
@@ -599,7 +610,7 @@ STRING_FUNCTION GetXMLValue(STRING key, STRING xml)
     IF(start = 0) RETURN("");
     start = start + LEN(key);
     
-    key = "<\\/" + RIGHT(key, LEN(key) - 1);
+    key = "</" + RIGHT(key, LEN(key) - 1);
     end = FIND(key, xml);
     
     TRACE("%s%s", key, MID(xml, start, end - start));
@@ -617,7 +628,14 @@ STRING_FUNCTION ParseJSON(STRING json)
     STRING value[JSON_LEN];
     
     value = GetValue("__type", json);
+    IF(value = "") RETURN("");
     value = REMOVE(":", value);
+
+    WHILE(FIND("\\/", json))
+    {
+        i = FIND("\\/", json);
+        MAKESTRING(json, "%s%s", LEFT(json, i - 1), RIGHT(json, LEN(json) - i));
+    }
     
     IF(value = "AppStatus:")
     {
@@ -668,21 +686,27 @@ STRING_FUNCTION ParseJSON(STRING json)
     {
         Duration     = ATOI(GetValue("Duration", json));
         Progress     = ATOI(GetValue("Progress", json));
-        Progress_Bar = MULDIV(Progress, 100, Duration);
+        
+        IF(Duration != 0)
+            Progress_Bar = MULDIV(Progress, 65535, Duration);
+        ELSE
+            Progress_Bar = 0;
         
         value = GetObject("MediaItem", json);
         value = GetValue("DisplayXML", value);
         Song_Title    = GetXMLValue("title",    value);
         Song_Album    = GetXMLValue("album",    value);
+        Song_Station  = GetXMLValue("station",  value);
         Song_Artist   = GetXMLValue("artists",  value);
         Song_Genre    = GetXMLValue("genres",   value);
         Song_Released = GetXMLValue("released", value);
         
         value = GetObjectFromArray("Attributes", json, 0);
+        value = GetValue("Value", value);
         IF(LEFT(value, 4) = "http")
             Song_Artwork = value;
         ELSE
-            MAKESTRING(Song_Artwork, "http://%s/casatunes/api/images/%s.jpg", Host, GetValue("Value", value));
+            MAKESTRING(Song_Artwork, "http://%s/casatunes/api/images/%s.jpg", Host, value);
         
         Next_Song        =      GetValue("NextSong",       json);
         Queue_Count      = ATOI(GetValue("QueueCount",     json));
@@ -750,7 +774,7 @@ STRING_FUNCTION ParseJSON(STRING json)
 
 CHANGE Response
 {
-    STRING  http[1024], json[JSON_LEN];
+    STRING  http[4096], json[JSON_LEN];
     
     json = GATHER("}}",   Response, 75);
     IF(json = "")
